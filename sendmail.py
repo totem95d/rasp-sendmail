@@ -5,86 +5,83 @@
 #script envoie de mail
 
 import smtplib
-import RPi.GPIO as GPIO
+#import RPi.GPIO as GPIO
 import time
-import socket
-import subprocess
+import logging
 
 
-GPIO.setmode(GPIO.BCM)
+GSM_WAIT_SECONDS = 60
+GSM_WAIT_INTERVAL = 10
 
-###########################
-#Attente d'1min pour lancement connexion internet
-###########################
-print ("Attente connexion internet 60 secondes")
-#time.sleep(10)
-#print ("10 sec écoulées")
-#time.sleep(10)
-#print ("20 sec écoulées")
-#time.sleep(10)
-#print ("30 sec écoulées")
-#time.sleep(10)
-#print ("40 sec écoulées")
-#time.sleep(10)
-#print ("50 sec écoulées")
+SMTP_HOST = 'smtp.gmail.com'
+SMTP_PORT = 587
+SMTP_USER = 'expediteur@gmail.com'
+SMTP_PWD = 'mdpexpediteur'
 
-#time.sleep(10)
-#print ("60 sec écoulées")
+MAIL_FROM = SMTP_USER
+MAIL_TO = 'destinataire@gmail.com'
+
+GPIO_PIN_FIN_RES = 23
+GPIO_PIN_RES_FULL = 24
+
+__logger__ = logging.getLogger(__name__)
 
 
 
-###########################
-#config des ports GPIO
-###########################
-pin_fin_res = 23
-pin_res_full = 24
-
-###########################
-#Démarrage de l'additiveur et envoie d'un mail
-###########################
-    
-content =  'additiveur societe X redemarre'
-mail = smtplib.SMTP('smtp.gmail.com',587)
-mail.ehlo()
-mail.starttls()
-mail.login('expediteur@gmail.com',"mdpexpediteur")
-mail.sendmail('expediteur@gmail.com','destinataire@gmail.com',content)
-mail.close()
-print ("Additiveur redémarré mail envoyé")
-
-time.sleep(5)         # wait 5 seconds  
+def send_email(content):
+    """
+    Envoi un email avec un contenu spécifique
+    :param content: Contenu du mail
+    :type content: str
+    :return: None
+    """
+    __logger__.info('Send an email for %s' % content)
+    mail = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+    mail.ehlo()
+    mail.starttls()
+    mail.login(SMTP_USER, SMTP_PWD)
+    mail.sendmail(MAIL_FROM, MAIL_TO, content)
+    mail.close()
+    __logger__.info('Mail sent')
 
 
-while True:
+def my_callback(channel):
+    """
+    Callback appelée pour détecter la fin de réservoir
+    :param channel:
+    :return:
+    """
+    GPIO.input(GPIO_PIN_FIN_RES)
+
+    if GPIO.input(GPIO_PIN_FIN_RES):
+        __logger__.info("Contact haut détecté on %s" % GPIO_PIN_FIN_RES)
+    else:
+        __logger__.info("Contact bas détécté %s" % GPIO_PIN_FIN_RES)
+        send_email('Reservoir vide')
+
+
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO)
+
+
+    __logger__.info('Attente connectivité internet')
+    for i in range(GSM_WAIT_INTERVAL, GSM_WAIT_SECONDS, GSM_WAIT_INTERVAL):
+        time.sleep(GSM_WAIT_INTERVAL)
+        __logger__.info('%i sec. écoulés' % i)
+
+    send_email('additiveur societe X redemarre')
+
+    time.sleep(5)  # Encore utile ?
 
     GPIO.setmode(GPIO.BCM)
-    
-    # Define a threaded callback function to run in another thread when events are detected  
-    def my_callback(channel):
-        GPIO.input(pin_fin_res)
-        
-        if GPIO.input(pin_fin_res):
-            print ("Contact haut détecté on {0}".format(pin_fin_res))
 
-        else:              
-            print ("Contact bas détécté {0}".format(pin_fin_res))
+    GPIO.setup(GPIO_PIN_FIN_RES, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+    GPIO.add_event_detect(GPIO_PIN_FIN_RES, GPIO.BOTH, callback=my_callback, bouncetime=3000)
 
-            content =  'Reservoir vide'
-            mail = smtplib.SMTP('smtp.gmail.com',587)
-            mail.ehlo()
-            mail.starttls()
-            mail.login('expediteur@gmail.com',"mdpexpediteur")
-            mail.sendmail('expediteur@gmail.com','destinataire@gmail.com',content)
-            mail.close()
-            print ("Réservoir vide mail envoyé à expediteur@gmail.com")
-            time.sleep(5)
-          
-
-    GPIO.setup(pin_fin_res, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-    GPIO.add_event_detect(pin_fin_res,GPIO.BOTH,callback=my_callback,bouncetime=3000)
     try:
-        print ("Attente fin de réservoir")
-        time.sleep(1)
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
 
-    finally:
-        GPIO.cleanup()
+    GPIO.cleanup()
