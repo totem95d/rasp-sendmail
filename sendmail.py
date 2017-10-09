@@ -1,14 +1,13 @@
 #!/usr/bin/env python
-# -*- coding:Utf-8 -*-
+# -*- coding:utf-8 -*-
 
 
-#script envoie de mail
+# script envoi de mail
 
 import smtplib
 import RPi.GPIO as GPIO
 import time
 import logging
-
 
 GSM_WAIT_SECONDS = 10
 GSM_WAIT_INTERVAL = 1
@@ -21,11 +20,12 @@ SMTP_PWD = 'mdpexpediteur'
 MAIL_FROM = SMTP_USER
 MAIL_TO = 'destinataire@gmail.com'
 
-GPIO_PIN_FIN_RES = 23
-GPIO_PIN_RES_FULL = 24
+GPIO_PIN_SWITCH_DOWN = 23
+GPIO_PIN_SWITCH_UP = 24
+
+GPIO_EVENT_BOUNCETIME = 3000
 
 __logger__ = logging.getLogger(__name__)
-
 
 
 def send_email(content):
@@ -45,40 +45,35 @@ def send_email(content):
     __logger__.info('Mail sent')
 
 
-def my_callback(channel):
+def tank_filling_callback(channel):
     """
-    Callback appelée pour détecter la fin de réservoir
-    :param channel:
+    Callback déclenchée en cas de passage d'un des capteur en état fermé
+    :param channel: Canal GPIO ayant déclenché la callback
     :return:
     """
-    GPIO.input(GPIO_PIN_FIN_RES)
 
-    if GPIO.input(GPIO_PIN_FIN_RES):
-        __logger__.info("Contact haut détecté on %s" % GPIO_PIN_FIN_RES)
-    else:
-        __logger__.info("Contact bas détécté %s" % GPIO_PIN_FIN_RES)
-        send_email('Reservoir vide')
-        
+    # Conditions sur les différents états possible avec un capteur fermé
+    if channel == GPIO_PIN_SWITCH_DOWN:  # Le capteur bas s'est fermé
+        if GPIO.input(GPIO_PIN_SWITCH_UP):  # le capteur haut aussi
+            __logger__.error('Tous capteurs fermés, situation anormale')
+        else:  # le capteur haut est ouvert
+            __logger__.info('Réservoir vide')
+            send_email('Reservoir vide')
+    elif channel == GPIO_PIN_SWITCH_UP:  # Le capteur haut est fermé
+        if GPIO.input(GPIO_PIN_SWITCH_DOWN):  # le capteur bas aussi
+            __logger__.error('Tous capteurs fermés, situation anormale')
+        else:  # le capteur bas est ouvert
+            __logger__.info('Réservoir plein')
+            send_email('Reservoir plein')
 
-def my_callback2(channel):
-    """
-    Callback appelée pour détecter lorsque le réservoir est rempli
-    :param channel:
-    :return:
-    """
-    GPIO.input(GPIO_PIN_RES_FULL)
 
-    if GPIO.input(GPIO_PIN_RES_FULL):
-        __logger__.info("Contact haut détecté on %s" % GPIO_PIN_RES_FULL)
-    else:
-        __logger__.info("Contact bas détécté %s" % GPIO_PIN_RES_FULL)
-        send_email('Reservoir Plein')
-        
 
 if __name__ == '__main__':
+
+    # Configuration du niveau de log par défaut
     logging.basicConfig(level=logging.INFO)
 
-
+    # Boucle pour attendre la connectivité internet (GSM)
     __logger__.info('Attente connectivité internet')
     for i in range(GSM_WAIT_INTERVAL, GSM_WAIT_SECONDS, GSM_WAIT_INTERVAL):
         time.sleep(GSM_WAIT_INTERVAL)
@@ -86,18 +81,24 @@ if __name__ == '__main__':
 
     send_email('additiveur societe X redemarre')
 
+    # Configuration des ports GPIO
     GPIO.setmode(GPIO.BCM)
+    GPIO.setup(GPIO_PIN_SWITCH_DOWN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+    GPIO.setup(GPIO_PIN_SWITCH_UP, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
 
-    GPIO.setup(GPIO_PIN_FIN_RES, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-    GPIO.add_event_detect(GPIO_PIN_FIN_RES, GPIO.BOTH, callback=my_callback, bouncetime=3000)
+    # Ajout de la callback en cas d'activation du capteur bas
+    GPIO.add_event_detect(GPIO_PIN_SWITCH_DOWN, GPIO.RISING, callback=tank_filling_callback, bouncetime=GPIO_EVENT_BOUNCETIME)
+    # idem pour le capteur haut
+    GPIO.add_event_detect(GPIO_PIN_SWITCH_UP, GPIO.RISING, callback=tank_filling_callback, bouncetime=GPIO_EVENT_BOUNCETIME)
 
-    GPIO.setup(GPIO_PIN_RES_FULL, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-    GPIO.add_event_detect(GPIO_PIN_RES_FULL, GPIO.BOTH, callback=my_callback2, bouncetime=3000)
-
+    # Boucle infinie pour laisser le programme en fonction
+    # Interception de l'arrêt volontaire (interruption) du programme (CTRL+C) pour un arrêt propre
     try:
         while True:
-            time.sleep(1)
+            pass
     except KeyboardInterrupt:
         pass
 
     GPIO.cleanup()
+
+    send_email('Arret de l\'additiveur')
