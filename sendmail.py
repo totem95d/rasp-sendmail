@@ -10,8 +10,8 @@ import time
 import logging
 
 
-GSM_WAIT_SECONDS = 60
-GSM_WAIT_INTERVAL = 10
+GSM_WAIT_SECONDS = 10
+GSM_WAIT_INTERVAL = 1
 
 SMTP_HOST = 'smtp.gmail.com'
 SMTP_PORT = 587
@@ -58,7 +58,22 @@ def my_callback(channel):
     else:
         __logger__.info("Contact bas détécté %s" % GPIO_PIN_FIN_RES)
         send_email('Reservoir vide')
+        
 
+def my_callback2(channel):
+    """
+    Callback appelée pour détecter lorsque le réservoir est rempli
+    :param channel:
+    :return:
+    """
+    GPIO.input(GPIO_PIN_RES_FULL)
+
+    if GPIO.input(GPIO_PIN_RES_FULL):
+        __logger__.info("Contact haut détecté on %s" % GPIO_PIN_RES_FULL)
+    else:
+        __logger__.info("Contact bas détécté %s" % GPIO_PIN_RES_FULL)
+        send_email('Reservoir Plein')
+        
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
@@ -71,12 +86,13 @@ if __name__ == '__main__':
 
     send_email('additiveur societe X redemarre')
 
-    time.sleep(5)  # Encore utile ?
-
     GPIO.setmode(GPIO.BCM)
 
     GPIO.setup(GPIO_PIN_FIN_RES, GPIO.IN, pull_up_down=GPIO.PUD_UP)
     GPIO.add_event_detect(GPIO_PIN_FIN_RES, GPIO.BOTH, callback=my_callback, bouncetime=3000)
+
+    GPIO.setup(GPIO_PIN_RES_FULL, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+    GPIO.add_event_detect(GPIO_PIN_RES_FULL, GPIO.BOTH, callback=my_callback2, bouncetime=3000)
 
     try:
         while True:
