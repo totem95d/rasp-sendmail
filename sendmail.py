@@ -9,19 +9,14 @@ import RPi.GPIO as GPIO
 import time
 import os
 import logging
+import configparser
+import argparse
 
-GSM_WAIT_HOST = 'google.com'
+CONFIG = dict()
+
+DEFAULT_CONFIG_FILE = 'default_config.ini'
+
 GSM_WAIT_INTERVAL = 1
-
-SEND_EMAIL = False
-
-SMTP_HOST = 'smtp.gmail.com'
-SMTP_PORT = 587
-SMTP_USER = 'user@gmail.com'
-SMTP_PWD = 'password'
-
-MAIL_FROM = SMTP_USER
-MAIL_TO = 'recipient@gmail.com'
 
 GPIO_PIN_SWITCH_DOWN = 23
 GPIO_PIN_SWITCH_UP = 24
@@ -49,15 +44,15 @@ def send_email(content):
     :return: None
     """
 
-    if not SEND_EMAIL:
+    if not CONFIG['notifications']['SEND_MAIL']:
         return None
 
     __logger__.info('Send an email for %s' % content)
-    mail = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+    mail = smtplib.SMTP(CONFIG['notifications']['SMTP_HOST'], CONFIG['notifications']['SMTP_PORT'])
     mail.ehlo()
     mail.starttls()
-    mail.login(SMTP_USER, SMTP_PWD)
-    mail.sendmail(MAIL_FROM, MAIL_TO, content)
+    mail.login(CONFIG['notifications']['SMTP_USER'], CONFIG['notifications']['SMTP_PWD'])
+    mail.sendmail(CONFIG['notifications']['MAIL_FROM'], CONFIG['notifications']['MAIL_TO'], content)
     mail.close()
     __logger__.info('Mail sent')
 
@@ -86,6 +81,16 @@ def tank_filling_callback(channel):
 
 
 if __name__ == '__main__':
+    global CONFIG
+
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument('--config', '-c',
+                            message='Fichier de configuration à utiliser')
+    args = arg_parser.parse_args()
+
+    CONFIG = configparser.ConfigParser()
+    CONFIG.readfp(DEFAULT_CONFIG_FILE)
+    CONFIG.read([args['config']])
 
     # Configuration du niveau de log par défaut
     log_format = '%(asctime)s %(levelname)s %(message)s'
@@ -93,7 +98,7 @@ if __name__ == '__main__':
 
     # Boucle pour attendre la connectivité internet (GSM)
     __logger__.info('Attente connectivité internet')
-    while not ping(GSM_WAIT_HOST):
+    while not ping(CONFIG['gsm_prepare']['GSM_WAIT_HOST']):
         time.sleep(GSM_WAIT_INTERVAL)
 
     __logger__.info('Additiveur démarré')
