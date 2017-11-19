@@ -9,10 +9,10 @@ import RPi.GPIO as GPIO
 import time
 import os
 import logging
-import configparser
+import ConfigParser as configparser
 import argparse
 
-CONFIG = dict()
+CONFIG = None
 
 DEFAULT_CONFIG_FILE = 'default_config.ini'
 
@@ -44,15 +44,15 @@ def send_email(content):
     :return: None
     """
 
-    if not CONFIG['notifications']['SEND_MAIL']:
+    if not CONFIG.getboolean('notifications', 'SEND_EMAIL'):
         return None
 
     __logger__.info('Send an email for %s' % content)
-    mail = smtplib.SMTP(CONFIG['notifications']['SMTP_HOST'], CONFIG['notifications']['SMTP_PORT'])
+    mail = smtplib.SMTP(CONFIG.get('notifications', 'SMTP_HOST'), CONFIG.getint('notifications', 'SMTP_PORT'))
     mail.ehlo()
     mail.starttls()
-    mail.login(CONFIG['notifications']['SMTP_USER'], CONFIG['notifications']['SMTP_PWD'])
-    mail.sendmail(CONFIG['notifications']['MAIL_FROM'], CONFIG['notifications']['MAIL_TO'], content)
+    mail.login(CONFIG.get('notifications', 'SMTP_USER'), CONFIG.get('notifications', 'SMTP_PWD'))
+    mail.sendmail(CONFIG.get('notifications', 'MAIL_FROM'), CONFIG.get('notifications', 'MAIL_TO'), content)
     mail.close()
     __logger__.info('Mail sent')
 
@@ -81,16 +81,15 @@ def tank_filling_callback(channel):
 
 
 if __name__ == '__main__':
-    global CONFIG
 
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument('--config', '-c',
-                            message='Fichier de configuration à utiliser')
+                            help='Fichier de configuration à utiliser')
     args = arg_parser.parse_args()
 
     CONFIG = configparser.ConfigParser()
-    CONFIG.readfp(DEFAULT_CONFIG_FILE)
-    CONFIG.read([args['config']])
+    CONFIG.readfp(open(DEFAULT_CONFIG_FILE))
+    CONFIG.read([args.config])
 
     # Configuration du niveau de log par défaut
     log_format = '%(asctime)s %(levelname)s %(message)s'
@@ -98,7 +97,7 @@ if __name__ == '__main__':
 
     # Boucle pour attendre la connectivité internet (GSM)
     __logger__.info('Attente connectivité internet')
-    while not ping(CONFIG['gsm_prepare']['GSM_WAIT_HOST']):
+    while not ping(CONFIG.get('gsm_prepare', 'GSM_WAIT_HOST')):
         time.sleep(GSM_WAIT_INTERVAL)
 
     __logger__.info('Additiveur démarré')
